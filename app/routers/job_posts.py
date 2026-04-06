@@ -6,6 +6,7 @@ from app.db import get_db
 from app.models import JobPost
 from app.schemas import JobPostCreate, JobPostRead, JobPostUpdate
 
+
 router = APIRouter(prefix="/api/v1/job-posts", tags=["Job Posts"])
 
 
@@ -105,3 +106,4 @@ async def delete_job_post(
     await db.commit()
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
