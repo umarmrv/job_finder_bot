@@ -5,6 +5,8 @@ from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict
 
 from app.models import JobStatus, JobType
+from pydantic import BaseModel
+from datetime import datetime
 
 
 class JobPostCreate(BaseModel):
@@ -48,3 +50,23 @@ class JobPostRead(BaseModel):
     contact_username: str | None
     created_at: datetime
     updated_at: datetime
+
+class UserCreate(BaseModel):
+    telegram_id: int
+    full_name: str
+    username: str
+    phone: str
+    role: str
+
+class UserRead(BaseModel):
+    id: int
+    telegram_id: int
+    full_name: str
+    username: str
+    phone: str
+    role: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True  # SQLAlchemy modeldan o'qish uchun    

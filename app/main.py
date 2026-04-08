@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from app.routers.job_posts import user_router
 
 from fastapi import FastAPI
 
@@ -26,3 +27,6 @@ app.include_router(job_posts_router)
 @app.get("/health", tags=["Health"])
 async def healthcheck():
     return {"status": "ok"}
+
+app.include_router(user_router)
+
