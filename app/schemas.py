@@ -8,6 +8,7 @@ from app.models import JobStatus, JobType
 
 
 class JobPostCreate(BaseModel):
+    user_id: int = Field(ge=1)
     title: str = Field(min_length=3, max_length=255)
     description: str = Field(min_length=10)
     city: str = Field(min_length=2, max_length=100)
@@ -25,6 +26,7 @@ class JobPostUpdate(BaseModel):
     city: str | None = Field(default=None, min_length=2, max_length=100)
     job_type: JobType | None = None
     status: JobStatus | None = None
+    published_message_id: int | None = Field(default=None, ge=1)
     salary: Decimal | None = Field(default=None, ge=0)
     workers_needed: int | None = Field(default=None, ge=1)
     work_date: date | None = None
@@ -36,11 +38,13 @@ class JobPostRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    user_id: int
     title: str
     description: str
     city: str
     job_type: JobType
     status: JobStatus
+    published_message_id: int | None
     salary: Decimal | None
     workers_needed: int | None
     work_date: date | None

@@ -3,10 +3,30 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.models import JobPost
+from app.models import JobPost, JobStatus, JobType
 from app.schemas import JobPostCreate, JobPostRead, JobPostUpdate
 
 router = APIRouter(prefix="/api/v1/job-posts", tags=["Job Posts"])
+
+ALLOWED_STATUS_TRANSITIONS = {
+    JobStatus.draft: {JobStatus.pending},
+    JobStatus.pending: {JobStatus.approved, JobStatus.closed},
+    JobStatus.approved: {JobStatus.published, JobStatus.closed},
+    JobStatus.published: {JobStatus.closed},
+    JobStatus.closed: set(),
+}
+
+
+def validate_status_transition(current_status: JobStatus, next_status: JobStatus) -> None:
+    allowed_statuses = ALLOWED_STATUS_TRANSITIONS[current_status]
+    if next_status not in allowed_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Invalid status transition: cannot move job post from "
+                f"{current_status.value} to {next_status.value}"
+            ),
+        )
 
 
 @router.post(
@@ -18,7 +38,7 @@ async def create_job_post(
     payload: JobPostCreate,
     db: AsyncSession = Depends(get_db),
 ):
-    job_post = JobPost(**payload.model_dump())
+    job_post = JobPost(**payload.model_dump(exclude_unset=True))
 
     db.add(job_post)
     await db.commit()
@@ -34,13 +54,24 @@ async def create_job_post(
 async def list_job_posts(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    status: JobStatus | None = Query(default=None),
+    job_type: JobType | None = Query(default=None),
+    city: str | None = Query(default=None, min_length=2, max_length=100),
     db: AsyncSession = Depends(get_db),
 ):
+    query = select(JobPost)
+
+    if status is not None:
+        query = query.where(JobPost.status == status)
+
+    if job_type is not None:
+        query = query.where(JobPost.job_type == job_type)
+
+    if city:
+        query = query.where(JobPost.city.ilike(f"%{city.strip()}%"))
+
     result = await db.execute(
-        select(JobPost)
-        .order_by(JobPost.id.desc())
-        .limit(limit)
-        .offset(offset)
+        query.order_by(JobPost.created_at.desc(), JobPost.id.desc()).limit(limit).offset(offset)
     )
     return list(result.scalars().all())
 
@@ -78,6 +109,17 @@ async def update_job_post(
         raise HTTPException(status_code=404, detail="Job post not found")
 
     update_data = payload.model_dump(exclude_unset=True)
+    next_status = update_data.get("status", job_post.status)
+
+    if "status" in update_data and next_status != job_post.status:
+        validate_status_transition(job_post.status, next_status)
+
+    if "published_message_id" in update_data and next_status != JobStatus.published:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="published_message_id can be set only for published job posts",
+        )
+
     for field, value in update_data.items():
         setattr(job_post, field, value)
 

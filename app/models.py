@@ -15,6 +15,7 @@ class JobType(str, enum.Enum):
 class JobStatus(str, enum.Enum):
     draft = "draft"
     pending = "pending"
+    approved = "approved"
     published = "published"
     closed = "closed"
 
@@ -23,6 +24,7 @@ class JobPost(Base):
     __tablename__ = "job_posts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     city: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -44,6 +46,7 @@ class JobPost(Base):
 
     contact_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     contact_username: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    published_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
