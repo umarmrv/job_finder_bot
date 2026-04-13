@@ -1,15 +1,15 @@
-
 from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field, ConfigDict
 
 from app.models import JobStatus, JobType
-from pydantic import BaseModel
-from datetime import datetime
 
+
+# -------------------- JobPost --------------------
 
 class JobPostCreate(BaseModel):
+    user_id: int = Field(ge=1)
     title: str = Field(min_length=3, max_length=255)
     description: str = Field(min_length=10)
     city: str = Field(min_length=2, max_length=100)
@@ -27,6 +27,7 @@ class JobPostUpdate(BaseModel):
     city: str | None = Field(default=None, min_length=2, max_length=100)
     job_type: JobType | None = None
     status: JobStatus | None = None
+    published_message_id: int | None = Field(default=None, ge=1)
     salary: Decimal | None = Field(default=None, ge=0)
     workers_needed: int | None = Field(default=None, ge=1)
     work_date: date | None = None
@@ -38,11 +39,13 @@ class JobPostRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    user_id: int
     title: str
     description: str
     city: str
     job_type: JobType
     status: JobStatus
+    published_message_id: int | None
     salary: Decimal | None
     workers_needed: int | None
     work_date: date | None
@@ -51,22 +54,25 @@ class JobPostRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
+# -------------------- User --------------------
+
 class UserCreate(BaseModel):
     telegram_id: int
     full_name: str
-    username: str
-    phone: str
-    role: str
+    username: str | None = None
+    phone: str | None = None
+    role: str = "employer"
+
 
 class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     telegram_id: int
     full_name: str
-    username: str
-    phone: str
+    username: str | None
+    phone: str | None
     role: str
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True  # SQLAlchemy modeldan o'qish uchun    
