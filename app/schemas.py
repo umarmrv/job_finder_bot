@@ -1,4 +1,3 @@
-
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -6,6 +5,8 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from app.models import JobStatus, JobType
 
+
+# -------------------- JobPost --------------------
 
 class JobPostCreate(BaseModel):
     user_id: int = Field(ge=1)
@@ -50,5 +51,28 @@ class JobPostRead(BaseModel):
     work_date: date | None
     contact_phone: str | None
     contact_username: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+# -------------------- User --------------------
+
+class UserCreate(BaseModel):
+    telegram_id: int
+    full_name: str
+    username: str | None = None
+    phone: str | None = None
+    role: str = "employer"
+
+
+class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    telegram_id: int
+    full_name: str
+    username: str | None
+    phone: str | None
+    role: str
     created_at: datetime
     updated_at: datetime
