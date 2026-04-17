@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, date
 
-from sqlalchemy import Integer, String, BigInteger, DateTime, Enum, Numeric, Text, func, Date
+from sqlalchemy import Integer, String, BigInteger, DateTime, Enum, Numeric, Text, func, Date, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -17,6 +17,7 @@ class JobStatus(str, enum.Enum):
     pending = "pending"
     approved = "approved"
     published = "published"
+    rejected = "rejected"
     closed = "closed"
 
 
@@ -47,7 +48,7 @@ class JobPost(Base):
     __tablename__ = "job_posts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     city: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -57,7 +58,7 @@ class JobPost(Base):
     workers_needed: Mapped[int | None] = mapped_column(Integer, nullable=True)
     work_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    contact_username: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    contact_username: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
     # важно — это твое поле, оставляем
     published_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)

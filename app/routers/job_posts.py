@@ -7,6 +7,7 @@ from app.models import User, JobPost, JobStatus, JobType
 from app.schemas import (
     UserCreate,
     UserRead,
+    UserUpdate,
     JobPostCreate,
     JobPostRead,
     JobPostUpdate,
@@ -19,9 +20,10 @@ router = APIRouter(prefix="/api/v1/job-posts", tags=["Job Posts"])
 
 ALLOWED_STATUS_TRANSITIONS = {
     JobStatus.draft: {JobStatus.pending},
-    JobStatus.pending: {JobStatus.approved, JobStatus.closed},
-    JobStatus.approved: {JobStatus.published, JobStatus.closed},
+    JobStatus.pending: {JobStatus.approved, JobStatus.rejected, JobStatus.closed},
+    JobStatus.approved: {JobStatus.published, JobStatus.rejected, JobStatus.closed},
     JobStatus.published: {JobStatus.closed},
+    JobStatus.rejected: set(),
     JobStatus.closed: set(),
 }
 
@@ -37,7 +39,27 @@ def validate_status_transition(current_status: JobStatus, next_status: JobStatus
 
 @router.post("", response_model=JobPostRead, status_code=status.HTTP_201_CREATED)
 async def create_job_post(payload: JobPostCreate, db: AsyncSession = Depends(get_db)):
-    job_post = JobPost(**payload.model_dump(exclude_unset=True))
+    owner_user_id = payload.user_id or payload.contact_username
+    if owner_user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User id is required to create a job post",
+        )
+
+    owner_user = await db.get(User, owner_user_id)
+    if owner_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    contact_user_id = payload.contact_username or owner_user_id
+    contact_user = await db.get(User, contact_user_id)
+    if contact_user is None:
+        raise HTTPException(status_code=404, detail="Contact user not found")
+
+    job_post = JobPost(
+        **payload.model_dump(exclude_unset=True, exclude={"user_id", "contact_username"}),
+        user_id=owner_user_id,
+        contact_username=contact_user_id,
+    )
     db.add(job_post)
     await db.commit()
     await db.refresh(job_post)
@@ -102,6 +124,11 @@ async def update_job_post(job_id: int, payload: JobPostUpdate, db: AsyncSession 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="published_message_id can be set only for published job posts",
         )
+
+    if "contact_username" in update_data and update_data["contact_username"] is not None:
+        contact_user = await db.get(User, update_data["contact_username"])
+        if contact_user is None:
+            raise HTTPException(status_code=404, detail="Contact user not found")
 
     for field, value in update_data.items():
         setattr(job_post, field, value)
@@ -168,6 +195,22 @@ async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@user_router.patch("/{user_id}", response_model=UserRead)
+async def update_user(user_id: int, payload: UserUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
+
+    await db.commit()
+    await db.refresh(user)
+    return user
 
 
 @user_router.get("", response_model=list[UserRead])
