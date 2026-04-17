@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, date
 
 from sqlalchemy import Integer, String, BigInteger, DateTime, Enum, Numeric, Text, func, Date, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 
@@ -60,6 +60,9 @@ class JobPost(Base):
     contact_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     contact_username: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
+    owner_user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    contact_user: Mapped["User | None"] = relationship(foreign_keys=[contact_username])
+
     # важно — это твое поле, оставляем
     published_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
@@ -74,3 +77,13 @@ class JobPost(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+    @property
+    def user_name(self) -> str | None:
+        return self.owner_user.full_name if self.owner_user else None
+
+    @property
+    def contact_name(self) -> str | None:
+        if self.contact_user is None:
+            return None
+        return self.contact_user.username or self.contact_user.full_name

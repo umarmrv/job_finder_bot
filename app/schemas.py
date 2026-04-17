@@ -40,7 +40,7 @@ class JobPostRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    user_id: int
+    user_name: str | None
     title: str
     description: str
     city: str
@@ -51,7 +51,7 @@ class JobPostRead(BaseModel):
     workers_needed: int | None
     work_date: date | None
     contact_phone: str | None
-    contact_username: int | None
+    contact_username: str | None = Field(validation_alias="contact_name")
     created_at: datetime
     updated_at: datetime
 
