@@ -4,8 +4,8 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 
 from app.db import engine, Base
-from app import models
 from app.routers.job_posts import router as job_posts_router
+from app.routers.job_posts import user_router
 
 
 @asynccontextmanager
@@ -43,7 +43,9 @@ app = FastAPI(
 app.openapi = custom_openapi
 
 # Подключаем роутеры
+# ✅ подключаем роутеры
 app.include_router(job_posts_router)
+app.include_router(user_router)
 
 # Кастомная главная страница — Swagger UI
 @app.get("/", include_in_schema=False)
