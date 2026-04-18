@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -38,6 +39,18 @@ def validate_status_transition(current_status: JobStatus, next_status: JobStatus
         )
 
 
+async def get_job_post_with_users(db: AsyncSession, job_id: int) -> JobPost | None:
+    result = await db.execute(
+        select(JobPost)
+        .options(
+            selectinload(JobPost.owner_user),
+            selectinload(JobPost.contact_user),
+        )
+        .where(JobPost.id == job_id)
+    )
+    return result.scalar_one_or_none()
+
+
 @router.post("", response_model=JobPostRead, status_code=status.HTTP_201_CREATED)
 async def create_job_post(payload: JobPostCreate, db: AsyncSession = Depends(get_db)):
     owner_user_id = payload.user_id or payload.contact_username
@@ -63,8 +76,7 @@ async def create_job_post(payload: JobPostCreate, db: AsyncSession = Depends(get
     )
     db.add(job_post)
     await db.commit()
-    await db.refresh(job_post)
-    return job_post
+    return await get_job_post_with_users(db, job_post.id)
 
 
 @router.get("", response_model=list[JobPostRead])
@@ -76,7 +88,10 @@ async def list_job_posts(
     city: str | None = Query(default=None, min_length=2, max_length=100),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(JobPost)
+    query = select(JobPost).options(
+        selectinload(JobPost.owner_user),
+        selectinload(JobPost.contact_user),
+    )
 
     if status is not None:
         query = query.where(JobPost.status == status)
@@ -97,8 +112,7 @@ async def list_job_posts(
 
 @router.get("/{job_id}", response_model=JobPostRead)
 async def get_job_post(job_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(JobPost).where(JobPost.id == job_id))
-    job_post = result.scalar_one_or_none()
+    job_post = await get_job_post_with_users(db, job_id)
 
     if not job_post:
         raise HTTPException(status_code=404, detail="Job post not found")
@@ -108,8 +122,7 @@ async def get_job_post(job_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.patch("/{job_id}", response_model=JobPostRead)
 async def update_job_post(job_id: int, payload: JobPostUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(JobPost).where(JobPost.id == job_id))
-    job_post = result.scalar_one_or_none()
+    job_post = await get_job_post_with_users(db, job_id)
 
     if not job_post:
         raise HTTPException(status_code=404, detail="Job post not found")
@@ -135,8 +148,7 @@ async def update_job_post(job_id: int, payload: JobPostUpdate, db: AsyncSession 
         setattr(job_post, field, value)
 
     await db.commit()
-    await db.refresh(job_post)
-    return job_post
+    return await get_job_post_with_users(db, job_post.id)
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
