@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-
+from fastapi.responses import RedirectResponse 
 from fastapi import FastAPI
 
 from app.db import engine, Base
@@ -15,7 +15,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Jobs Bot API",
+    title="Mekhrobod Jobs Bot API",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -23,6 +23,10 @@ app = FastAPI(
 # ✅ подключаем роутеры
 app.include_router(job_posts_router)
 app.include_router(user_router)
+
+@app.get("/", include_in_schema=False)  # ← add this
+async def root():
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/health", tags=["Health"])
