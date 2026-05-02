@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db import get_db
 from app.models import User, JobPost, JobStatus, JobType
@@ -38,14 +38,42 @@ def validate_status_transition(current_status: JobStatus, next_status: JobStatus
         )
 
 
+def _job_post_with_users_query():
+    return select(JobPost).options(
+        selectinload(JobPost.owner_user),
+        selectinload(JobPost.contact_user),
+    )
+
+
+def _raise_not_found(detail: str) -> None:
+    raise HTTPException(status_code=404, detail=detail)
+
+
+def _require_status_for_published_message(next_status: JobStatus) -> None:
+    if next_status != JobStatus.published:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="published_message_id can be set only for published job posts",
+        )
+
+
+async def _get_user_or_404(db: AsyncSession, user_id: int, detail: str = "User not found") -> User:
+    user = await db.get(User, user_id)
+    if user is None:
+        _raise_not_found(detail)
+    return user
+
+
+async def _get_job_post_or_404(db: AsyncSession, job_id: int) -> JobPost:
+    job_post = await get_job_post_with_users(db, job_id)
+    if job_post is None:
+        _raise_not_found("Job post not found")
+    return job_post
+
+
 async def get_job_post_with_users(db: AsyncSession, job_id: int) -> JobPost | None:
     result = await db.execute(
-        select(JobPost)
-        .options(
-            selectinload(JobPost.owner_user),
-            selectinload(JobPost.contact_user),
-        )
-        .where(JobPost.id == job_id)
+        _job_post_with_users_query().where(JobPost.id == job_id)
     )
     return result.scalar_one_or_none()
 
@@ -59,14 +87,10 @@ async def create_job_post(payload: JobPostCreate, db: AsyncSession = Depends(get
             detail="User id is required to create a job post",
         )
 
-    owner_user = await db.get(User, owner_user_id)
-    if owner_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+    await _get_user_or_404(db, owner_user_id)
 
     contact_user_id = payload.contact_username or owner_user_id
-    contact_user = await db.get(User, contact_user_id)
-    if contact_user is None:
-        raise HTTPException(status_code=404, detail="Contact user not found")
+    await _get_user_or_404(db, contact_user_id, detail="Contact user not found")
 
     job_post = JobPost(
         **payload.model_dump(exclude_unset=True, exclude={"user_id", "contact_username"}),
@@ -87,10 +111,7 @@ async def list_job_posts(
     city: str | None = Query(default=None, min_length=2, max_length=100),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(JobPost).options(
-        selectinload(JobPost.owner_user),
-        selectinload(JobPost.contact_user),
-    )
+    query = _job_post_with_users_query()
 
     if status is not None:
         query = query.where(JobPost.status == status)
@@ -111,20 +132,12 @@ async def list_job_posts(
 
 @router.get("/{job_id}", response_model=JobPostRead)
 async def get_job_post(job_id: int, db: AsyncSession = Depends(get_db)):
-    job_post = await get_job_post_with_users(db, job_id)
-
-    if not job_post:
-        raise HTTPException(status_code=404, detail="Job post not found")
-
-    return job_post
+    return await _get_job_post_or_404(db, job_id)
 
 
 @router.patch("/{job_id}", response_model=JobPostRead)
 async def update_job_post(job_id: int, payload: JobPostUpdate, db: AsyncSession = Depends(get_db)):
-    job_post = await get_job_post_with_users(db, job_id)
-
-    if not job_post:
-        raise HTTPException(status_code=404, detail="Job post not found")
+    job_post = await _get_job_post_or_404(db, job_id)
 
     update_data = payload.model_dump(exclude_unset=True)
     next_status = update_data.get("status", job_post.status)
@@ -132,16 +145,11 @@ async def update_job_post(job_id: int, payload: JobPostUpdate, db: AsyncSession 
     if "status" in update_data and next_status != job_post.status:
         validate_status_transition(job_post.status, next_status)
 
-    if "published_message_id" in update_data and next_status != JobStatus.published:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="published_message_id can be set only for published job posts",
-        )
+    if "published_message_id" in update_data:
+        _require_status_for_published_message(next_status)
 
     if "contact_username" in update_data and update_data["contact_username"] is not None:
-        contact_user = await db.get(User, update_data["contact_username"])
-        if contact_user is None:
-            raise HTTPException(status_code=404, detail="Contact user not found")
+        await _get_user_or_404(db, update_data["contact_username"], detail="Contact user not found")
 
     for field, value in update_data.items():
         setattr(job_post, field, value)
@@ -152,12 +160,7 @@ async def update_job_post(job_id: int, payload: JobPostUpdate, db: AsyncSession 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_job_post(job_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(JobPost).where(JobPost.id == job_id))
-    job_post = result.scalar_one_or_none()
-
-    if not job_post:
-        raise HTTPException(status_code=404, detail="Job post not found")
-
+    job_post = await _get_job_post_or_404(db, job_id)
     await db.delete(job_post)
     await db.commit()
 
@@ -186,23 +189,12 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
 
 @user_router.get("/{user_id}", response_model=UserRead)
 async def get_user(user_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return user
+    return await _get_user_or_404(db, user_id)
 
 
 @user_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
+    user = await _get_user_or_404(db, user_id)
     await db.delete(user)
     await db.commit()
 
@@ -211,11 +203,7 @@ async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
 
 @user_router.patch("/{user_id}", response_model=UserRead)
 async def update_user(user_id: int, payload: UserUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = await _get_user_or_404(db, user_id)
 
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(user, field, value)
