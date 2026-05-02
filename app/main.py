@@ -1,14 +1,15 @@
 from contextlib import asynccontextmanager
-from fastapi.responses import RedirectResponse 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 
-from app.db import engine, Base
+from app.db import Base, engine
 from app.routers.job_posts import router as job_posts_router
 from app.routers.job_posts import user_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    del app  # FastAPI lifespan signature requires this argument.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -20,11 +21,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ✅ подключаем роутеры
 app.include_router(job_posts_router)
 app.include_router(user_router)
 
-@app.get("/", include_in_schema=False)  # ← add this
+
+@app.get("/", include_in_schema=False)
 async def root():
     return RedirectResponse(url="/docs")
 
