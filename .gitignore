@@ -1,9 +1,12 @@
-# Virtual environment
+# Virtual environments
 venv/
+.venv/
+
+# Environment files
 .env
 
-# Python cache
-pycache/
+# Python cache/artifacts
+__pycache__/
 *.pyc
 
 # IDE
@@ -15,6 +18,4 @@ pycache/
 Thumbs.db
 
 # Logs
-*.logvenv/
-__pycache__/
-.env
+*.log
