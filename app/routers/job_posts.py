@@ -13,6 +13,7 @@ from app.schemas import (
     UserRead,
     UserUpdate,
     JobPostCreate,
+    JobPostPublishInfo,
     JobPostRead,
     JobPostStatusUpdate,
     JobPostUpdate,
@@ -94,6 +95,11 @@ def _ensure_status_change_access(current_user: User, job_post: JobPost, next_sta
     if next_status in {JobStatus.pending, JobStatus.closed}:
         if is_admin or is_owner:
             return
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+
+def _ensure_admin(current_user: User) -> None:
+    if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
 
@@ -234,6 +240,22 @@ async def change_job_post_status(
     _ensure_status_change_access(current_user, job_post, payload.status)
 
     job_post.status = payload.status
+    await db.commit()
+    return await get_job_post_with_users(db, job_post.id)
+
+
+@router.post("/{job_id}/publish-info", response_model=JobPostRead)
+async def set_job_post_publish_info(
+    job_id: int,
+    payload: JobPostPublishInfo,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _ensure_admin(current_user)
+    job_post = await _get_job_post_or_404(db, job_id)
+    job_post.published_message_id = payload.published_message_id
+    job_post.published_chat_id = payload.published_chat_id
+    job_post.status = JobStatus.published
     await db.commit()
     return await get_job_post_with_users(db, job_post.id)
 

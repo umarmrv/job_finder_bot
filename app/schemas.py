@@ -48,6 +48,11 @@ class JobPostStatusUpdate(BaseModel):
     status: JobStatus = Field(description="Новый бизнес-статус вакансии.")
 
 
+class JobPostPublishInfo(BaseModel):
+    published_message_id: int = Field(ge=1, description="ID опубликованного сообщения в Telegram канале.")
+    published_chat_id: int = Field(description="ID Telegram канала/чата (может быть отрицательным).")
+
+
 class JobPostRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
