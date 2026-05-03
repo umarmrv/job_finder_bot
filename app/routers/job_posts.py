@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.dependencies.auth import get_current_user
 from app.db import get_db
 from app.models import User, JobPost, JobStatus, JobType
 from app.schemas import (
@@ -207,6 +208,11 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(db_user)
     return db_user
+
+
+@user_router.get("/me", response_model=UserRead)
+async def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 
 @user_router.get("/{user_id}", response_model=UserRead)
