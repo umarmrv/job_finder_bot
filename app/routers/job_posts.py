@@ -112,20 +112,26 @@ async def get_job_post_with_users(db: AsyncSession, job_id: int) -> JobPost | No
 
 @router.post("", response_model=JobPostRead, status_code=status.HTTP_201_CREATED)
 async def create_job_post(payload: JobPostCreate, db: AsyncSession = Depends(get_db)):
-    owner_user_id = payload.user_id or payload.contact_username
+    owner_user_id = payload.user_id
     if owner_user_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User id is required to create a job post",
         )
 
-    await _get_user_or_404(db, owner_user_id)
+    owner_user = await _get_user_or_404(db, owner_user_id)
 
     contact_user_id = payload.contact_username or owner_user_id
     await _get_user_or_404(db, contact_user_id, detail="Contact user not found")
 
+    create_data = payload.model_dump(exclude_unset=True, exclude={"user_id", "contact_username"})
+    if "status" not in create_data:
+        create_data["status"] = JobStatus.pending
+    if create_data.get("contact_phone") is None:
+        create_data["contact_phone"] = owner_user.phone
+
     job_post = JobPost(
-        **payload.model_dump(exclude_unset=True, exclude={"user_id", "contact_username"}),
+        **create_data,
         user_id=owner_user_id,
         contact_username=contact_user_id,
     )
