@@ -19,24 +19,44 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    job_posts_columns = {col["name"]: col for col in inspector.get_columns("job_posts")}
+    job_posts_indexes = {idx["name"] for idx in inspector.get_indexes("job_posts")}
+
     op.execute("ALTER TYPE job_status_enum ADD VALUE IF NOT EXISTS 'approved'")
 
-    op.add_column(
-        "job_posts",
-        sa.Column("user_id", sa.Integer(), nullable=True),
-    )
-    op.add_column(
-        "job_posts",
-        sa.Column("published_message_id", sa.Integer(), nullable=True),
-    )
-    op.create_index(op.f("ix_job_posts_user_id"), "job_posts", ["user_id"], unique=False)
+    if "user_id" not in job_posts_columns:
+        op.add_column(
+            "job_posts",
+            sa.Column("user_id", sa.Integer(), nullable=True),
+        )
 
-    op.execute("UPDATE job_posts SET user_id = 1 WHERE user_id IS NULL")
-    op.alter_column("job_posts", "user_id", existing_type=sa.Integer(), nullable=False)
+    if "published_message_id" not in job_posts_columns:
+        op.add_column(
+            "job_posts",
+            sa.Column("published_message_id", sa.Integer(), nullable=True),
+        )
+
+    if op.f("ix_job_posts_user_id") not in job_posts_indexes:
+        op.create_index(op.f("ix_job_posts_user_id"), "job_posts", ["user_id"], unique=False)
+
+    inspector = sa.inspect(bind)
+    job_posts_columns = {col["name"]: col for col in inspector.get_columns("job_posts")}
+    if "user_id" in job_posts_columns and job_posts_columns["user_id"]["nullable"]:
+        op.execute("UPDATE job_posts SET user_id = 1 WHERE user_id IS NULL")
+        op.alter_column("job_posts", "user_id", existing_type=sa.Integer(), nullable=False)
 
 
 def downgrade() -> None:
-    op.drop_index(op.f("ix_job_posts_user_id"), table_name="job_posts")
-    op.drop_column("job_posts", "published_message_id")
-    op.drop_column("job_posts", "user_id")
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    job_posts_columns = {col["name"] for col in inspector.get_columns("job_posts")}
+    job_posts_indexes = {idx["name"] for idx in inspector.get_indexes("job_posts")}
 
+    if op.f("ix_job_posts_user_id") in job_posts_indexes:
+        op.drop_index(op.f("ix_job_posts_user_id"), table_name="job_posts")
+    if "published_message_id" in job_posts_columns:
+        op.drop_column("job_posts", "published_message_id")
+    if "user_id" in job_posts_columns:
+        op.drop_column("job_posts", "user_id")
