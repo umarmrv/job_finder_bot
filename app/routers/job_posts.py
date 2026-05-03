@@ -14,6 +14,7 @@ from app.schemas import (
     UserUpdate,
     JobPostCreate,
     JobPostRead,
+    JobPostStatusUpdate,
     JobPostUpdate,
 )
 
@@ -43,8 +44,8 @@ ADMIN_IDS = _parse_admin_ids(os.getenv("ADMIN_IDS"))
 
 ALLOWED_STATUS_TRANSITIONS = {
     JobStatus.draft: {JobStatus.pending},
-    JobStatus.pending: {JobStatus.approved, JobStatus.rejected, JobStatus.closed},
-    JobStatus.approved: {JobStatus.published, JobStatus.rejected, JobStatus.closed},
+    JobStatus.pending: {JobStatus.approved, JobStatus.rejected},
+    JobStatus.approved: {JobStatus.published},
     JobStatus.published: {JobStatus.closed},
     JobStatus.rejected: set(),
     JobStatus.closed: set(),
@@ -79,6 +80,21 @@ def _ensure_job_post_access(current_user: User, job_post: JobPost) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden",
         )
+
+
+def _ensure_status_change_access(current_user: User, job_post: JobPost, next_status: JobStatus) -> None:
+    is_admin = current_user.role == "admin"
+    is_owner = job_post.user_id == current_user.id
+
+    if next_status in {JobStatus.approved, JobStatus.rejected, JobStatus.published}:
+        if not is_admin:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+        return
+
+    if next_status in {JobStatus.pending, JobStatus.closed}:
+        if is_admin or is_owner:
+            return
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
 
 def _require_status_for_published_message(next_status: JobStatus) -> None:
@@ -187,13 +203,14 @@ async def update_job_post(
     _ensure_job_post_access(current_user, job_post)
 
     update_data = payload.model_dump(exclude_unset=True)
-    next_status = update_data.get("status", job_post.status)
-
-    if "status" in update_data and next_status != job_post.status:
-        validate_status_transition(job_post.status, next_status)
+    if "status" in update_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Use status endpoint to change status",
+        )
 
     if "published_message_id" in update_data:
-        _require_status_for_published_message(next_status)
+        _require_status_for_published_message(job_post.status)
 
     if "contact_username" in update_data and update_data["contact_username"] is not None:
         await _get_user_or_404(db, update_data["contact_username"], detail="Contact user not found")
@@ -201,6 +218,22 @@ async def update_job_post(
     for field, value in update_data.items():
         setattr(job_post, field, value)
 
+    await db.commit()
+    return await get_job_post_with_users(db, job_post.id)
+
+
+@router.post("/{job_id}/status", response_model=JobPostRead)
+async def change_job_post_status(
+    job_id: int,
+    payload: JobPostStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    job_post = await _get_job_post_or_404(db, job_id)
+    validate_status_transition(job_post.status, payload.status)
+    _ensure_status_change_access(current_user, job_post, payload.status)
+
+    job_post.status = payload.status
     await db.commit()
     return await get_job_post_with_users(db, job_post.id)
 

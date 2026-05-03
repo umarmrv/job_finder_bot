@@ -44,6 +44,10 @@ class JobPostUpdate(BaseModel):
     contact_username: int | None = Field(default=None, ge=1, description="Новый ID контактного пользователя.")
 
 
+class JobPostStatusUpdate(BaseModel):
+    status: JobStatus = Field(description="Новый бизнес-статус вакансии.")
+
+
 class JobPostRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
