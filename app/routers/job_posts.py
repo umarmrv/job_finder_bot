@@ -124,9 +124,8 @@ async def create_job_post(payload: JobPostCreate, db: AsyncSession = Depends(get
     contact_user_id = payload.contact_username or owner_user_id
     await _get_user_or_404(db, contact_user_id, detail="Contact user not found")
 
-    create_data = payload.model_dump(exclude_unset=True, exclude={"user_id", "contact_username"})
-    if "status" not in create_data:
-        create_data["status"] = JobStatus.pending
+    create_data = payload.model_dump(exclude_unset=True, exclude={"user_id", "contact_username", "status"})
+    create_data["status"] = JobStatus.pending
     if create_data.get("contact_phone") is None:
         create_data["contact_phone"] = owner_user.phone
 
