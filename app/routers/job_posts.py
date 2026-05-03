@@ -71,6 +71,16 @@ def _raise_not_found(detail: str) -> None:
     raise HTTPException(status_code=404, detail=detail)
 
 
+def _ensure_job_post_access(current_user: User, job_post: JobPost) -> None:
+    if current_user.role == "admin":
+        return
+    if job_post.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
+        )
+
+
 def _require_status_for_published_message(next_status: JobStatus) -> None:
     if next_status != JobStatus.published:
         raise HTTPException(
@@ -158,8 +168,14 @@ async def get_job_post(job_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("/{job_id}", response_model=JobPostRead)
-async def update_job_post(job_id: int, payload: JobPostUpdate, db: AsyncSession = Depends(get_db)):
+async def update_job_post(
+    job_id: int,
+    payload: JobPostUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     job_post = await _get_job_post_or_404(db, job_id)
+    _ensure_job_post_access(current_user, job_post)
 
     update_data = payload.model_dump(exclude_unset=True)
     next_status = update_data.get("status", job_post.status)
@@ -181,8 +197,13 @@ async def update_job_post(job_id: int, payload: JobPostUpdate, db: AsyncSession 
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_job_post(job_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_job_post(
+    job_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     job_post = await _get_job_post_or_404(db, job_id)
+    _ensure_job_post_access(current_user, job_post)
     await db.delete(job_post)
     await db.commit()
 
