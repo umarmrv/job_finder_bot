@@ -63,8 +63,8 @@ class JobPost(Base):
     owner_user: Mapped["User"] = relationship(foreign_keys=[user_id])
     contact_user: Mapped["User | None"] = relationship(foreign_keys=[contact_username])
 
-    # важно — это твое поле, оставляем
     published_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    published_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

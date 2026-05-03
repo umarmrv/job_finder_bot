@@ -33,6 +33,10 @@ class JobPostUpdate(BaseModel):
         ge=1,
         description="ID сообщения в канале после публикации (разрешено только для published).",
     )
+    published_chat_id: int | None = Field(
+        default=None,
+        description="ID Telegram канала/чата, где опубликована вакансия.",
+    )
     salary: Decimal | None = Field(default=None, ge=0, description="Обновлённая зарплата/оплата.")
     workers_needed: int | None = Field(default=None, ge=1, description="Обновлённое число работников.")
     work_date: date | None = Field(default=None, description="Новая дата выхода на работу.")
@@ -51,6 +55,7 @@ class JobPostRead(BaseModel):
     job_type: JobType = Field(description="Тип объявления.")
     status: JobStatus = Field(description="Текущий статус вакансии.")
     published_message_id: int | None = Field(description="ID опубликованного сообщения в канале.")
+    published_chat_id: int | None = Field(description="ID Telegram канала/чата публикации.")
     salary: Decimal | None = Field(description="Зарплата/оплата.")
     workers_needed: int | None = Field(description="Требуемое количество работников.")
     work_date: date | None = Field(description="Дата работы.")
