@@ -143,12 +143,16 @@ async def create_job_post(payload: JobPostCreate, db: AsyncSession = Depends(get
 async def list_job_posts(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    user_id: int | None = Query(default=None, ge=1),
     status: JobStatus | None = Query(default=None),
     job_type: JobType | None = Query(default=None),
     city: str | None = Query(default=None, min_length=2, max_length=100),
     db: AsyncSession = Depends(get_db),
 ):
     query = _job_post_with_users_query()
+
+    if user_id is not None:
+        query = query.where(JobPost.user_id == user_id)
 
     if status is not None:
         query = query.where(JobPost.status == status)
@@ -236,6 +240,15 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
     return db_user
 
 
+@user_router.get("/by-telegram/{telegram_id}", response_model=UserRead)
+async def get_user_by_telegram_id(telegram_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.telegram_id == telegram_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        _raise_not_found("User not found")
+    return user
+
+
 @user_router.get("/me", response_model=UserRead)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
@@ -244,6 +257,20 @@ async def get_me(current_user: User = Depends(get_current_user)):
 @user_router.get("/{user_id}", response_model=UserRead)
 async def get_user(user_id: int, db: AsyncSession = Depends(get_db)):
     return await _get_user_or_404(db, user_id)
+
+
+@user_router.get("/{user_id}/job-posts", response_model=list[JobPostRead])
+async def get_user_job_posts(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_user_or_404(db, user_id)
+    result = await db.execute(
+        _job_post_with_users_query()
+        .where(JobPost.user_id == user_id)
+        .order_by(JobPost.created_at.desc(), JobPost.id.desc())
+    )
+    return list(result.scalars().all())
 
 
 @user_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
