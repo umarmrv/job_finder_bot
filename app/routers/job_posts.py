@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +19,25 @@ from app.schemas import (
 # -------------------- JOB POSTS --------------------
 
 router = APIRouter(prefix="/api/v1/job-posts", tags=["Job Posts"])
+
+
+def _parse_admin_ids(raw_admin_ids: str | None) -> set[int]:
+    if not raw_admin_ids:
+        return set()
+
+    admin_ids: set[int] = set()
+    for value in raw_admin_ids.split(","):
+        candidate = value.strip()
+        if not candidate:
+            continue
+        try:
+            admin_ids.add(int(candidate))
+        except ValueError:
+            continue
+    return admin_ids
+
+
+ADMIN_IDS = _parse_admin_ids(os.getenv("ADMIN_IDS"))
 
 
 ALLOWED_STATUS_TRANSITIONS = {
@@ -174,12 +195,13 @@ user_router = APIRouter(prefix="/api/v1/users", tags=["Users"])
 
 @user_router.post("/", response_model=UserRead)
 async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
+    forced_role = "admin" if user.telegram_id in ADMIN_IDS else "employer"
     db_user = User(
         telegram_id=user.telegram_id,
         full_name=user.full_name,
         username=user.username,
         phone=user.phone,
-        role=user.role,
+        role=forced_role,
     )
     db.add(db_user)
     await db.commit()
